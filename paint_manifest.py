@@ -1,5 +1,8 @@
-# The selenium driver won't click any elements. Use a manual url until Selenium click decides to work again.
-data = {
+''' 
+The selenium driver will sometimes get flagged by the gw site. This is an alternative means of accessing the individual urls
+and scraping the data on a page by page basis. Instead of using the internal navigation bar, we visit the links based on the color. 
+'''
+paint_manifest = {
     'green': 'https://www.games-workshop.com/en-US/detail?N=673862412&Ndi=3184893862&Ndn=GW_Painting_and_Modelling_Browse_Paint_by_Colour.dyn.dimensionPaintColour&Nr=AND%28sku.siteId%3AUS_gw%2Cproduct.locale%3Aen_US_gw%29&Nrs=collection%28%29%2Frecord%5Bproduct.startDate+%3C%3D+1590690120000+and+product.endDate+%3E%3D+1590690120000%5D',
 
     'brown': 'https://www.games-workshop.com/en-US/detail?N=2013579642&Ndi=3184893862&Ndn=GW_Painting_and_Modelling_Browse_Paint_by_Colour.dyn.dimensionPaintColour&Nr=AND%28sku.siteId%3AUS_gw%2Cproduct.locale%3Aen_US_gw%29&Nrs=collection%28%29%2Frecord%5Bproduct.startDate+%3C%3D+1590691800000+and+product.endDate+%3E%3D+1590691800000%5D',

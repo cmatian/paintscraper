@@ -10,7 +10,7 @@ import re
 import pprint  # just for testing and viewing objects in a legible format
 
 # Selective Imports
-from paint_manifest import data as URL_MANIFEST
+from paint_manifest import paint_manifest as COLOR_LINK_MANIFEST
 from bs4 import BeautifulSoup as bs
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
@@ -45,12 +45,11 @@ inventory = {
 
 class GamesWorkshopInventory:
     def __init__(self):
-        self.driver = webdriver.Chrome(
-            executable_path="C:\\Apps\\Geckodriver\\chromedriver.exe")
+        self.driver = None
         self.initial_url = "https://www.games-workshop.com/en-US/Black-Templar-2019?Ndn=GW_Painting_and_Modelling_Browse_Paint_by_Colour.dyn.dimensionPaintColour&Ndi=3184893862"
-        self.fragment_url = "https://www.games-workshop.com/en-US/detail?"
-        self.links = URL_MANIFEST
-        self.colour_keys = {}
+        self.fragment_url = "https://www.games-workshop.com/en-US/detail"
+        # self.links = COLOR_LINK_MANIFEST
+        self.colour_keys = []
         self.inventory = {}  # Storage
 
     # This will review the page and add the names of colours we need to visit. We use the colours as a key which is used to determine which link Selenium will visit next.
@@ -59,23 +58,33 @@ class GamesWorkshopInventory:
             'div', class_='hgn__filterButtonName')
 
         for item in items:
-            nav_color_text = item.text.strip().lower()
-            nav_query_string = item['data-name']
+            self.colour_keys.append(item.text.strip().lower())
 
-            self.colour_keys[nav_color_text] = nav_query_string
+        self.colour_keys.append('black')
 
-        # self.colour_keys.append(item.text.strip().lower())
+    def navigator(self, paint_colour):
+        colour_title = paint_colour.title()
 
-    def visit_next_colour(self, colour_key):
-        colour_title = colour_key.title()
+        # Find the button using the class and the colour_key (title case). Then use that element as the click target
+        try:
+            # Syntax - Select div that has the class and text
+            target = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located(
+                (By.XPATH, f"//div[contains(@class, 'hgn__filterButtonName') and contains(text(), '{colour_title}')]")))
+        except NoSuchElementException as error:
+            print(f"Exception caught in <fn visit_next_colour>: {error}")
+            sys.exit(0)
+        finally:
+            target.click()
 
-        # This needs to be refactored completely because recaptcha is interfering
+            # After clicking wait for the colour title to appear completely before parsing the page
+            WebDriverWait(self.driver, 10).until(EC.presence_of_element_located(
+                (By.XPATH, f"//span[contains(@class, 'ics__breadcrumb') and contains(text(), '{colour_title}')]")))
 
-    def get_page_source(self):
-        return self.driver.page_source
+            self.get_paints(paint_colour)
 
     # Function will handle the main task of grabbing the paints from each page and placing them into the correct structure
     def get_paints(self, paint_colour):
+
         paints = bs(self.driver.page_source,
                     'html.parser').find_all('span', class_='recordItem')
 
@@ -100,8 +109,10 @@ class GamesWorkshopInventory:
 
             # Append the paint dictionary to the inventory dictionary (classified by type)
             if paint_type not in self.inventory:
-                self.inventory[paint_type] = {}  # Initialize
+                # Initialize an empty key value pair using the paint_type as the key
+                self.inventory[paint_type] = {}
 
+            # Fill the key with the paint_name object which holds various details
             self.inventory[paint_type].update({
                 paint_name: {
                     'price': paint_price,
@@ -111,16 +122,14 @@ class GamesWorkshopInventory:
                 }
             })
 
+        print(f'Done parsing {paint_colour.title()} colours page.')
     '''
     The data provided from scraping shows inconsistency across the board with regards to naming conventions. Over the years
-    GW has added newer products with slightly different naming systems. For example, Citadel Death Guard Spray v.s Chaos Black Spray. To make up for this inconsistency, the data needs to be further filtered through a function and normalized to a standard convention.
+        GW has added newer products with slightly different naming systems. For example, Citadel Death Guard Spray v.s Chaos Black Spray. To make up for this inconsistency, the data needs to be further filtered through a function and normalized to a standard convention.
 
-    Older colors (pre/circa 2019) use a different convention compared to recently added colors. The date is now preceded by the size of the paint on recent colors. The regex we have supplied
+        Older colors (pre/circa 2019) use a different convention compared to recently added colors. The date is now preceded by the size of the paint on recent colors. I will add in the sizes after normalizing the names because the naming conventions are so wildly different in some cases. Key words to remove from the name include "Citadel", "Global", "Spray", and various <
 
-    #>ml sizes. I will add in the sizes after normalizing the names because the naming conventions are so wildly different in some cases.
-    Key words to remove from the name include "Citadel", "Global", "Spray", and various <
-
-    Also to note, there are a few technicals that are not 24ml. These need to be checked manually by the code and assigned the correct values.
+        Also to note, there are a few technicals that are not 24ml. These need to be checked manually by the code and assigned the correct values.
     '''
 
     def normalize_colors(self, paint_type, paint_name) -> tuple:
@@ -171,25 +180,49 @@ class GamesWorkshopInventory:
 
         return new_name, new_size
 
+    # Back up navigator incase the captcha gets flagged and alerted. Switch the code to this method if we have problems
+    def navigator_bak(self, colour):
+        print(f"{colour}...")
+        print(f"{self.fragment_url}{self.colour_keys[colour]}")
+        self.driver.get(f"{self.fragment_url}{self.colour_keys[colour]}")
+
+    def initialize_driver(self):
+        options = webdriver.ChromeOptions()
+        options.add_argument("--disable-blink-features")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_experimental_option(
+            "excludeSwitches", ["enable-automation"])
+        options.add_experimental_option('useAutomationExtension', False)
+
+        self.driver = webdriver.Chrome(
+            executable_path="C:\\Apps\\Geckodriver\\chromedriver.exe", options=options)
+
     def engage_driver(self):
 
-        self.driver.get(self.initial_url)  # Opens the initial page
+        self.initialize_driver()
 
+        # Opens the initial page which are the 'black' colours - we come back to this page at the end of the loop
+        self.driver.get(self.initial_url)
+
+        # Generate a colour key which is used to navigate to the next page
         self.generate_colour_key()
 
         for colour in self.colour_keys:
-            print(self.links[colour])
+            self.navigator(colour)
 
-        # self.get_paints('black')  # Initially start on the black page
-        # for colour_key in self.colour_keys:
-        #     self.visit_next_colour(colour_key)
-
-        print(pprint.pprint(self.inventory))
+        # At the end of the loop we should be on the turquoise page
+        pprint.pprint(self.inventory)
 
         self.disengage_driver()
 
+        self.produce_json()
+
     def disengage_driver(self):
         return self.driver.close()
+
+    def produce_json(self):
+        with open('gw_paint_inventory.json', 'w+') as file:
+            file.write(json.dumps(self.inventory, indent=4))
 
 
 if __name__ == "__main__":
